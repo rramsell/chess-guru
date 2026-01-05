@@ -1,0 +1,56 @@
+[project]
+name = "chesscom-guru"
+version = "0.1.4"
+description = "Async Chess.com public API client"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+
+authors = [
+  { name = "Richard Ramsell", email = "richramsell@proton.me" },
+]
+
+keywords = ["chess", "chess.com", "api", "pgn", "async", "aiohttp"]
+
+classifiers = [
+  "License :: Other/Proprietary License",
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Typing :: Typed",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Games/Entertainment :: Board Games",
+  "Topic :: Software Development :: Libraries",
+]
+
+dependencies = [
+  "aiohttp>=3.9.0",
+  "backoff>=2.2.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/rramsell/chesscom-guru"
+Repository = "https://github.com/rramsell/chesscom-guru"
+Issues = "https://github.com/rramsell/chesscom-guru/issues"
+
+[build-system]
+requires = ["uv_build>=0.9.21,<0.10.0"]
+build-backend = "uv_build"
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+explicit = true
+
+[dependency-groups]
+dev = [
+  "pytest>=8",
+  "pytest-asyncio>=0.23",
+  "pytest-rerunfailures>=14",
+]
