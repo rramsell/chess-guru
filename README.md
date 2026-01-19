@@ -1,4 +1,4 @@
-# chesscom-guru
+# chess-guru
 
 Async Python client for the Chess.com Public API.
 
@@ -6,7 +6,7 @@ Built on `aiohttp` with automatic retries for rate limits and server errors. Doe
 
 ## Install
 ```bash
-pip install chesscom-guru
+pip install chess-guru
 ```
 
 Requires Python 3.9+.
@@ -15,7 +15,7 @@ Requires Python 3.9+.
 ```python
 import asyncio
 import aiohttp
-from chesscom_guru import ChesscomAPI
+from chess_guru import ChesscomAPI
 
 async def main():
     async with aiohttp.ClientSession() as session:
@@ -101,7 +101,7 @@ ChesscomAPI(
     session,
     base_url="https://api.chess.com/pub",
     timeout_sec=20,
-    user_agent="chesscom-guru/0.1.0",
+    user_agent="chess-guru/0.1.0",
     headers=None
 )
 

@@ -2,7 +2,7 @@ import aiohttp
 import pytest
 from datetime import datetime, timezone, timedelta
 
-from chesscom_guru import ChesscomAPI
+from chess_guru import ChesscomAPI
 
 
 USERNAME = "richardramsell"

@@ -4,7 +4,11 @@ import backoff
 import logging
 from typing import Any, Optional
 from datetime import datetime, timezone
-from urllib.parse import urlparse
+from .utils import (
+    parse_archive_year_month,
+    to_utc_dt,
+    parse_pgn,
+)
 
 logger = logging.getLogger(__name__)
 if not logger.handlers:
@@ -44,7 +48,7 @@ class ChesscomAPI:
         session:aiohttp.ClientSession, 
         base_url:str = 'https://api.chess.com/pub', 
         timeout_sec:int = 20,
-        user_agent: str = "chesscom-guru/0.1.0",
+        user_agent: str = "chess-guru/0.1.0",
         headers: Optional[dict[str, str]] = None,
     ) -> None:
         """
@@ -151,19 +155,6 @@ class ChesscomAPI:
         """
         return await self._request(endpoint=f"player/{username}/games/archives")
     
-    @staticmethod
-    def _parse_archive_year_month(archive_url: str) -> tuple[int, int]:
-        path = urlparse(archive_url).path.rstrip("/")
-        parts = path.split("/")
-        return int(parts[-2]), int(parts[-1])
-
-    @staticmethod
-    def _to_utc_dt(ts: Optional[datetime]) -> Optional[datetime]:
-        if ts is None:
-            return None
-        if ts.tzinfo is None:
-            return ts.replace(tzinfo=timezone.utc)
-        return ts.astimezone(timezone.utc)
 
     async def get_games(
         self,
@@ -178,7 +169,7 @@ class ChesscomAPI:
         High-level steps:
             1) Call get_archives(username) to get monthly archive URLs
             2) If from_ts/to_ts provided:
-                - Convert to UTC via _to_utc_dt()
+                - Convert to UTC via to_utc_dt()
                 - Filter archive URLs by month bounds (year, month)
             3) Fetch each month's JSON concurrently
             4) Inside each month payload:
@@ -211,8 +202,8 @@ class ChesscomAPI:
         archive_data = await self.get_archives(username)
         archive_urls = archive_data.get("archives", [])
 
-        from_dt = self._to_utc_dt(from_ts)
-        to_dt = self._to_utc_dt(to_ts)
+        from_dt = to_utc_dt(from_ts)
+        to_dt = to_utc_dt(to_ts)
 
         if from_dt and to_dt and from_dt > to_dt:
             raise ValueError("from_ts must be <= to_ts")
@@ -225,7 +216,7 @@ class ChesscomAPI:
             end_ym = (to_dt.year, to_dt.month) if to_dt else None
 
             def month_in_range(u: str) -> bool:
-                ym = self._parse_archive_year_month(u)
+                ym = parse_archive_year_month(u)
                 if start_ym and ym < start_ym:
                     return False
                 if end_ym and ym > end_ym:
@@ -270,6 +261,19 @@ class ChesscomAPI:
                         continue
                     if to_dt and g_dt > to_dt:
                         continue
+
+                pgn = g.get("pgn")
+                if pgn:
+                    try:
+                        headers, end_result, moves = await asyncio.to_thread(parse_pgn, pgn)
+                        g = dict(g)
+                        g["parsed_pgn"] = {
+                            "headers": headers,
+                            "result": end_result,
+                            "moves": moves,
+                        }
+                    except Exception as exc:
+                        logger.debug("PGN parse failed for game: %r", exc)
 
                 kept.append(g)
 
