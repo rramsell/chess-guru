@@ -145,6 +145,19 @@ class ChesscomAPI:
         """
         return await self._request(endpoint=f"player/{username}")
     
+    async def get_player_stats(self, username:str) -> dict:
+        # grabs player stats as of query
+        return await self._request(endpoint=f"player/{username}/stats")
+    
+    async def get_games_to_move(self, username:str) -> dict:
+        # gets games 'to move' at time of query, provides insight into
+        # vacations delaying play if ran over window
+        return await self._request(endpoint=f"player/{username}/games/to-move")
+    
+    async def get_tournaments(self, username:str) -> dict:
+        # grabs tournaments participated in by a user
+        return await self._request(endpoint=f"player/{username}/tournaments")
+    
     async def get_archives(self, username:str) -> dict:
         """
         Fetch the list of monthly game archive URLs for a Chess.com user.
