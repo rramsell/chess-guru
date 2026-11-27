@@ -216,14 +216,14 @@ class ChesscomAPI:
               "to_ts": "<utc isoformat>" | None,
             }
         """
-        archive_data = await self.get_archives(username)
-        archive_urls = archive_data.get("archives", [])
-
         from_dt = to_utc_dt(from_ts)
         to_dt = to_utc_dt(to_ts)
 
         if from_dt and to_dt and from_dt > to_dt:
             raise ValueError("from_ts must be <= to_ts")
+
+        archive_data = await self.get_archives(username)
+        archive_urls = archive_data.get("archives", [])
 
         # Filter month URLs by (year, month) bounds derived from timestamps
         if from_dt is None and to_dt is None:

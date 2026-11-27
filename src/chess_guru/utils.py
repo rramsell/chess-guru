@@ -20,6 +20,11 @@ def to_utc_dt(ts: Optional[datetime]) -> Optional[datetime]:
 
 def _split_pgn_headers_and_moves(pgn: str) -> tuple[str, str, str | None]:
     _end_result_pattern = re.compile(r'(1-0|0-1|1/2-1/2|\*)\s*$')
+    pgn = pgn.replace("\r\n", "\n").strip()
+    if "\n\n" not in pgn:
+        raise ValueError(
+            "Malformed PGN: expected a blank line between headers and movetext."
+        )
     headers, moves = pgn.split("\n\n", 1)
     moves = moves.strip()
 
@@ -80,8 +85,16 @@ def _parse_moves(pgn_moves: str) -> dict:
         # split on "<num>... "
         chunk_parts = re.split(rf'\s+{game_round}\.\.\.\s+', after_white_num, maxsplit=1)
 
-        white_text = chunk_parts[0].strip()
-        black_text = chunk_parts[1].strip() if len(chunk_parts) > 1 else None
+        if len(chunk_parts) > 1:
+            white_text = chunk_parts[0].strip()
+            black_text = chunk_parts[1].strip()
+        else:
+            # No "<num>..." marker. PGN only needs one after a comment (e.g. a
+            # clock), so a clock-less PGN reads "e4 e5". Split off white's move
+            # plus its optional {comment}; whatever remains is black's move.
+            wm = re.match(r'(\S+(?:\s*\{[^}]*\})?)\s*(.*)', after_white_num, re.S)
+            white_text = wm.group(1) if wm else after_white_num
+            black_text = wm.group(2).strip() if wm else None
 
         rounds[game_round] = {
             "white": _extract_move_and_clock(white_text)

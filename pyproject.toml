@@ -50,6 +50,7 @@ explicit = true
 
 [dependency-groups]
 dev = [
+  "aioresponses>=0.7.9",
   "pytest>=8",
   "pytest-asyncio>=0.23",
   "pytest-rerunfailures>=14",

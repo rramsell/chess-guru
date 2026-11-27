@@ -1,3 +1,4 @@
+import os
 import aiohttp
 import pytest
 from datetime import datetime, timezone, timedelta
@@ -5,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 from chess_guru import ChesscomAPI
 
 
-USERNAME = "richardramsell"
+USERNAME = os.environ.get("CHESSCOM_TEST_USERNAME") or "richardramsell"
 pytestmark = pytest.mark.integration
 
 
