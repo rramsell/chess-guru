@@ -122,9 +122,8 @@ def _parse_moves(pgn_moves: str) -> dict:
         # remove leading "<num>. "
         after_white_num = chunk[m.end() :].strip()
 
-        # No "<num>..." marker here (it got its own chunk if present). PGN only
-        # needs one after a comment, so a clock-less PGN reads "e4 e5". Split
-        # off white's move plus its optional {comment}; the rest is black's.
+        # No "<num>..." marker, e.g. clock-less "e4 e5": white's move and
+        # its optional {comment} come first, the rest is black's.
         wm = re.match(r"(\S+(?:\s*\{\d+\})?)\s*(.*)", after_white_num, re.S)
         white_text = wm.group(1) if wm else after_white_num
         black_text = wm.group(2).strip() if wm else None

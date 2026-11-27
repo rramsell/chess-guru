@@ -56,7 +56,6 @@ jobs:
   integration:
     # Hits live APIs, so only run by hand or on the weekly schedule.
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-    name: integration (${{ matrix.provider }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
