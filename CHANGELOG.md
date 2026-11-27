@@ -18,6 +18,8 @@ All notable changes to this project are documented here.
 - Default `User-Agent` is `chess-guru/<installed version>` instead of a
   hardcoded `chess-guru/0.1.0`. `chess_guru.__version__` now reports the
   installed version.
+- Minimum `aiohttp` raised to 3.13.5 (the newest release that still supports
+  Python 3.9; newer Pythons install 3.14+).
 
 ### Internal
 - Offline unit tests for the parser and client (HTTP mocked with an
