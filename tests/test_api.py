@@ -97,7 +97,11 @@ async def test_headers_are_sent_and_overridable(mocked):
         api = ChesscomAPI(session, headers={"User-Agent": "my-app/1.0", "X-Extra": "1"})
         await api.get_player(USER)
     sent = mocked.requests[("GET", URL(f"{BASE}/player/{USER}"))][0].kwargs["headers"]
-    assert sent == {"User-Agent": "my-app/1.0", "Accept": "application/json", "X-Extra": "1"}
+    assert sent == {
+        "User-Agent": "my-app/1.0",
+        "Accept": "application/json",
+        "X-Extra": "1",
+    }
 
 
 @pytest.mark.parametrize(
@@ -184,13 +188,19 @@ def game(end_time, pgn=WHITE_MATE_WITH_CLOCKS, **extra):
 
 
 def mock_archives(m, *year_months):
-    m.get(ARCHIVES_URL, payload={"archives": [month_url(y, mo) for y, mo in year_months]})
+    m.get(
+        ARCHIVES_URL, payload={"archives": [month_url(y, mo) for y, mo in year_months]}
+    )
 
 
 async def test_get_games_no_filter_returns_everything(api, mocked):
     mock_archives(mocked, (2024, 5), (2024, 6))
-    mocked.get(month_url(2024, 5), payload={"games": [game(ts(2024, 5, 1)), game(None)]})
-    mocked.get(month_url(2024, 6), payload={"games": [game(ts(2024, 6, 1), pgn=NO_CLOCKS)]})
+    mocked.get(
+        month_url(2024, 5), payload={"games": [game(ts(2024, 5, 1)), game(None)]}
+    )
+    mocked.get(
+        month_url(2024, 6), payload={"games": [game(ts(2024, 6, 1), pgn=NO_CLOCKS)]}
+    )
 
     out = await api.get_games(USER)
 
@@ -278,7 +288,9 @@ async def test_get_games_records_failed_month_in_errors(api, mocked):
 
 async def test_get_games_keeps_game_when_pgn_unparseable(api, mocked):
     mock_archives(mocked, (2024, 5))
-    mocked.get(month_url(2024, 5), payload={"games": [game(ts(2024, 5, 1), pgn="garbage")]})
+    mocked.get(
+        month_url(2024, 5), payload={"games": [game(ts(2024, 5, 1), pgn="garbage")]}
+    )
 
     out = await api.get_games(USER)
 
@@ -289,7 +301,9 @@ async def test_get_games_keeps_game_when_pgn_unparseable(api, mocked):
 
 async def test_get_games_does_not_mutate_payload_extras(api, mocked):
     mock_archives(mocked, (2024, 5))
-    mocked.get(month_url(2024, 5), payload={"games": [game(ts(2024, 5, 1))], "extra": 1})
+    mocked.get(
+        month_url(2024, 5), payload={"games": [game(ts(2024, 5, 1))], "extra": 1}
+    )
 
     out = await api.get_games(USER)
 
@@ -328,3 +342,13 @@ async def test_get_games_respects_max_concurrency(api, mocked):
     assert len(out["months"]) == 8
     assert peak == 3
 
+
+def test_default_user_agent_matches_package_version():
+    from importlib.metadata import version
+
+    import chess_guru
+    from chess_guru.api import DEFAULT_USER_AGENT
+
+    assert chess_guru.__version__ == version("chess-guru")
+    assert DEFAULT_USER_AGENT == f"chess-guru/{chess_guru.__version__}"
+    assert ChesscomAPI(session=None).headers["User-Agent"] == DEFAULT_USER_AGENT

@@ -1,9 +1,9 @@
 import os
+
 import aiohttp
 import pytest
 
 from chess_guru import ChesscomAPI
-
 
 USERNAME = os.environ.get("CHESSCOM_TEST_USERNAME") or "richardramsell"
 pytestmark = pytest.mark.integration

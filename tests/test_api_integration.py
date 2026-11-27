@@ -1,10 +1,10 @@
 import os
+from datetime import datetime, timedelta, timezone
+
 import aiohttp
 import pytest
-from datetime import datetime, timezone, timedelta
 
 from chess_guru import ChesscomAPI
-
 
 USERNAME = os.environ.get("CHESSCOM_TEST_USERNAME") or "richardramsell"
 pytestmark = pytest.mark.integration
@@ -34,7 +34,7 @@ async def test_get_archives(api):
 @pytest.mark.asyncio
 async def test_get_games_basic(api):
     out = await api.get_games(USERNAME, max_concurrency=4)
-    
+
     assert out["username"] == USERNAME
     assert len(out["months"]) >= 1
     assert any(m.get("games") for m in out["months"].values())
@@ -44,12 +44,12 @@ async def test_get_games_basic(api):
 async def test_get_games_with_time_filter(api):
     to_ts = datetime.now(timezone.utc)
     from_ts = to_ts - timedelta(days=30)
-    
+
     out = await api.get_games(USERNAME, max_concurrency=4, from_ts=from_ts, to_ts=to_ts)
-    
+
     from_dt = datetime.fromisoformat(out["from_ts"])
     to_dt = datetime.fromisoformat(out["to_ts"])
-    
+
     for month in out["months"].values():
         for game in month.get("games", []):
             game_dt = datetime.fromtimestamp(game["end_time"], tz=timezone.utc)

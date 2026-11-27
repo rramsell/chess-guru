@@ -19,7 +19,6 @@ from pgn_fixtures import (
     WHITE_MATE_WITH_CLOCKS,
 )
 
-
 # --- parse_archive_year_month -------------------------------------------------
 
 
@@ -173,9 +172,18 @@ def test_parse_pgn_without_clocks_keeps_black_moves():
     _, result, moves = parse_pgn(NO_CLOCKS)
     assert result == "1-0"
     assert moves == {
-        1: {"white": {"move": "e4", "clock": None}, "black": {"move": "e5", "clock": None}},
-        2: {"white": {"move": "Nf3", "clock": None}, "black": {"move": "Nc6", "clock": None}},
-        3: {"white": {"move": "Bb5", "clock": None}, "black": {"move": "a6", "clock": None}},
+        1: {
+            "white": {"move": "e4", "clock": None},
+            "black": {"move": "e5", "clock": None},
+        },
+        2: {
+            "white": {"move": "Nf3", "clock": None},
+            "black": {"move": "Nc6", "clock": None},
+        },
+        3: {
+            "white": {"move": "Bb5", "clock": None},
+            "black": {"move": "a6", "clock": None},
+        },
         4: {"white": {"move": "Ba4", "clock": None}},
     }
 

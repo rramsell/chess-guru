@@ -11,6 +11,14 @@ on:
         default: ""
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uvx ruff check src tests
+      - run: uvx ruff format --check src tests
+
   unit:
     name: unit (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
