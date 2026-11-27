@@ -1,7 +1,7 @@
 [project]
 name = "chess-guru"
-version = "0.1.4"
-description = "Async Chess.com public API client"
+version = "0.2.0"
+description = "Async Chess.com and Lichess API client"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
@@ -11,7 +11,7 @@ authors = [
   { name = "Richard Ramsell", email = "richramsell@proton.me" },
 ]
 
-keywords = ["chess", "chess.com", "api", "pgn", "async", "aiohttp"]
+keywords = ["chess", "chess.com", "lichess", "api", "pgn", "async", "aiohttp"]
 
 classifiers = [
   "Development Status :: 3 - Alpha",
