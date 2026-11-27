@@ -5,7 +5,7 @@ import pytest
 
 from chess_guru import ChesscomAPI
 
-USERNAME = os.environ.get("CHESSCOM_TEST_USERNAME") or "richardramsell"
+USERNAME = os.environ.get("CHESSCOM_TEST_USERNAME") or "JobandJethro"
 pytestmark = pytest.mark.integration
 
 
