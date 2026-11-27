@@ -8,7 +8,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from chess_guru import ChesscomAPI
+import raw_game_fixtures as fx
+from chess_guru import ChesscomAPI, Game, GameCollection
 from fake_session import FakeSession
 from pgn_fixtures import NO_CLOCKS, WHITE_MATE_WITH_CLOCKS
 
@@ -242,3 +243,150 @@ async def test_get_games_respects_max_concurrency(api, mocked):
 
     assert len(out["months"]) == 8
     assert peak == 3
+
+
+# --- unified games ------------------------------------------------------------
+
+
+def real_game(end_time, n, base=fx.CHESSCOM_BLITZ_MATE, **extra):
+    url = f"https://www.chess.com/game/live/{n}"
+    return {**base, "url": url, "uuid": f"uuid-{n}", "end_time": end_time, **extra}
+
+
+async def test_get_unified_games_newest_first_across_months(api, mocked):
+    mock_archives(mocked, (2024, 5), (2024, 6))
+    mocked.add(
+        month_url(2024, 5),
+        payload={"games": [real_game(ts(2024, 5, 1), 1), real_game(ts(2024, 5, 9), 2)]},
+    )
+    mocked.add(
+        month_url(2024, 6),
+        payload={
+            "games": [
+                real_game(ts(2024, 6, 2), 3, fx.CHESSCOM_AGREED),
+                real_game(ts(2024, 6, 3), 4, fx.CHESSCOM_DAILY),
+            ]
+        },
+    )
+
+    out = await api.get_unified_games(USER)
+
+    assert isinstance(out, GameCollection)
+    assert (out.provider, out.username, out.errors) == ("chesscom", USER, {})
+    assert [g.id for g in out.games] == ["uuid-4", "uuid-3", "uuid-2", "uuid-1"]
+    assert all(isinstance(g, Game) for g in out.games)
+    assert out.games[1].termination == "draw_agreement"
+    assert out.games[0].speed == "correspondence"
+    assert out.games[0].raw is None
+
+
+async def test_get_unified_games_time_filter(api, mocked):
+    mock_archives(mocked, (2024, 4), (2024, 5), (2024, 6))
+    mocked.add(
+        month_url(2024, 5),
+        payload={
+            "games": [
+                real_game(ts(2024, 5, 14, 23, 59, 59), 1),
+                real_game(ts(2024, 5, 15), 2),
+                real_game(ts(2024, 5, 31), 3),
+            ]
+        },
+    )
+    mocked.add(
+        month_url(2024, 6),
+        payload={
+            "games": [real_game(ts(2024, 6, 10), 4), real_game(ts(2024, 6, 11), 5)]
+        },
+    )
+
+    out = await api.get_unified_games(
+        USER,
+        from_ts=datetime(2024, 5, 15, tzinfo=timezone.utc),
+        to_ts=datetime(2024, 6, 10),
+    )
+
+    assert [g.id for g in out.games] == ["uuid-4", "uuid-3", "uuid-2"]
+    assert mocked.calls(month_url(2024, 4)) == 0
+    assert out.from_ts == datetime(2024, 5, 15, tzinfo=timezone.utc)
+    assert out.to_ts == datetime(2024, 6, 10, tzinfo=timezone.utc)
+
+
+async def test_get_unified_games_collects_errors(api, mocked):
+    mock_archives(mocked, (2024, 5), (2024, 6))
+    broken = real_game(ts(2024, 5, 2), 2, white="not a dict")
+    mocked.add(
+        month_url(2024, 5), payload={"games": [real_game(ts(2024, 5, 1), 1), broken]}
+    )
+    mocked.add(month_url(2024, 6), status=404)
+
+    out = await api.get_unified_games(USER)
+
+    assert [g.id for g in out.games] == ["uuid-1"]
+    assert set(out.errors) == {month_url(2024, 6), broken["url"]}
+    assert "404" in out.errors[month_url(2024, 6)]
+    assert "AttributeError" in out.errors[broken["url"]]
+
+
+async def test_get_unified_games_include_raw(api, mocked):
+    mock_archives(mocked, (2024, 5))
+    raw = real_game(ts(2024, 5, 1), 1)
+    mocked.add(month_url(2024, 5), payload={"games": [raw]})
+
+    out = await api.get_unified_games(USER, include_raw=True)
+
+    # parsed_pgn is added by the client and left out of raw
+    assert out.games[0].raw == raw
+
+
+async def test_iter_unified_games_skips_bad_games(api, mocked):
+    mock_archives(mocked, (2024, 5))
+    mocked.add(
+        month_url(2024, 5),
+        payload={
+            "games": [
+                real_game(ts(2024, 5, 1), 1),
+                real_game(ts(2024, 5, 2), 2, black="oops"),
+            ]
+        },
+    )
+
+    games = [g async for g in api.iter_unified_games(USER)]
+
+    assert [g.id for g in games] == ["uuid-1"]
+
+
+async def test_get_unified_games_passes_max_concurrency(api, mocked):
+    months = [(2024, m) for m in range(1, 5)]
+    mock_archives(mocked, *months)
+    in_flight = 0
+    peak = 0
+
+    async def slow(url, **kwargs):
+        nonlocal in_flight, peak
+        in_flight += 1
+        peak = max(peak, in_flight)
+        for _ in range(5):
+            await asyncio.sleep(0)
+        in_flight -= 1
+
+    for y, mo in months:
+        mocked.add(month_url(y, mo), payload={"games": []}, callback=slow)
+
+    out = await api.get_unified_games(USER, max_concurrency=2)
+
+    assert out.games == [] and peak == 2
+
+
+async def test_get_unified_games_rejects_unknown_kwargs(api, mocked):
+    with pytest.raises(TypeError):
+        await api.get_unified_games(USER, max_games=5)
+
+
+async def test_get_unified_games_rejects_inverted_range(api, mocked):
+    with pytest.raises(ValueError, match="from_ts must be <= to_ts"):
+        await api.get_unified_games(
+            USER,
+            from_ts=datetime(2024, 2, 1, tzinfo=timezone.utc),
+            to_ts=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        )
+    assert not mocked.requests
