@@ -1,4 +1,4 @@
 from ._version import __version__
-from .api import ChesscomAPI
+from .chesscom import ChesscomAPI
 
 __all__ = ["ChesscomAPI", "__version__"]

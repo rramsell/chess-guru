@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import re
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Iterable, Optional
 from urllib.parse import urlparse
+
+logger = logging.getLogger("chess_guru.api")
 
 
 def parse_archive_year_month(archive_url: str) -> tuple[int, int]:
@@ -114,3 +118,60 @@ def _parse_moves(pgn_moves: str) -> dict:
 def parse_pgn(pgn: str) -> tuple[dict, str | None, dict]:
     headers, moves, end_result = _split_pgn_headers_and_moves(pgn)
     return _parse_pgn_headers(headers), end_result, _parse_moves(moves)
+
+
+def game_in_range(
+    game: dict,
+    time_key: str,
+    from_dt: Optional[datetime],
+    to_dt: Optional[datetime],
+    unit: str = "s",
+) -> bool:
+    """Inclusive check of ``game[time_key]`` against the bounds. Games without
+    the key only pass when there are no bounds."""
+    if from_dt is None and to_dt is None:
+        return True
+    value = game.get(time_key)
+    if value is None:
+        return False
+    if unit == "ms":
+        value = value / 1000
+    elif unit != "s":
+        raise ValueError(f"unit must be 's' or 'ms', got {unit!r}")
+    g_dt = datetime.fromtimestamp(value, tz=timezone.utc)
+    if from_dt and g_dt < from_dt:
+        return False
+    if to_dt and g_dt > to_dt:
+        return False
+    return True
+
+
+async def attach_parsed_pgn(game: dict) -> dict:
+    """Return a copy of ``game`` with ``parsed_pgn`` added. If there's no PGN or
+    it doesn't parse, the game comes back unchanged."""
+    pgn = game.get("pgn")
+    if not pgn:
+        return game
+    try:
+        headers, end_result, moves = await asyncio.to_thread(parse_pgn, pgn)
+    except Exception as exc:
+        logger.debug("PGN parse failed for game: %r", exc)
+        return game
+    game = dict(game)
+    game["parsed_pgn"] = {"headers": headers, "result": end_result, "moves": moves}
+    return game
+
+
+async def annotate_games(
+    games: Iterable[dict],
+    time_key: str,
+    from_dt: Optional[datetime] = None,
+    to_dt: Optional[datetime] = None,
+    unit: str = "s",
+) -> list[dict[str, Any]]:
+    """Drop games outside the time range and attach ``parsed_pgn`` to the rest."""
+    kept = []
+    for g in games:
+        if game_in_range(g, time_key, from_dt, to_dt, unit):
+            kept.append(await attach_parsed_pgn(g))
+    return kept
