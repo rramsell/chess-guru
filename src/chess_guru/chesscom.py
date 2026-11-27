@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, AsyncIterator, Optional
 
 import aiohttp
 
 from ._http import DEFAULT_USER_AGENT, BaseAPIClient, logger
+from .models import Game
+from .normalize import game_from_chesscom
 from .utils import annotate_games, parse_archive_year_month, to_utc_dt
 
 
 class ChesscomAPI(BaseAPIClient):
     provider_name = "chess.com"
+    provider_key = "chesscom"
 
     def __init__(
         self,
@@ -199,3 +202,29 @@ class ChesscomAPI(BaseAPIClient):
             "from_ts": from_dt.isoformat() if from_dt else None,
             "to_ts": to_dt.isoformat() if to_dt else None,
         }
+
+    async def _raw_unified_games(
+        self,
+        username: str,
+        from_dt: Optional[datetime],
+        to_dt: Optional[datetime],
+        errors: dict[str, str],
+        **provider_kwargs: Any,
+    ) -> AsyncIterator[dict]:
+        out = await self.get_games(
+            username, from_ts=from_dt, to_ts=to_dt, **provider_kwargs
+        )
+        errors.update(out["errors"])
+        games = [g for month in out["months"].values() for g in month["games"]]
+        # archives are oldest first; flip to match lichess
+        games.sort(key=lambda g: g.get("end_time") or 0, reverse=True)
+        for g in games:
+            yield g
+
+    @staticmethod
+    def _to_game(raw: dict, include_raw: bool) -> Game:
+        return game_from_chesscom(raw, include_raw=include_raw)
+
+    @staticmethod
+    def _game_key(raw: dict) -> str:
+        return str(raw.get("url") or raw.get("uuid") or "<unknown game>")

@@ -53,6 +53,23 @@ jobs:
       - name: Run unit tests
         run: uv run pytest tests
 
+  unit-lowest:
+    # Checks the lower bounds in pyproject, pydantic in particular.
+    name: unit (lowest deps)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.4.0
+        with:
+          python-version: "3.9"
+
+      - name: Install deps
+        run: uv sync --group dev --resolution lowest-direct
+
+      - name: Run unit tests
+        run: uv run pytest tests
+
   integration:
     # Hits live APIs, so only run by hand or on the weekly schedule.
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'

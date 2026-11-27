@@ -8,7 +8,8 @@ import aiohttp
 import pytest
 
 import lichess_pgn_fixtures as li
-from chess_guru import LichessAPI
+import raw_game_fixtures as fx
+from chess_guru import GameCollection, LichessAPI
 from fake_session import FakeSession
 
 BASE = "https://lichess.org"
@@ -103,6 +104,7 @@ async def test_default_games_params_and_headers(api, mocked):
         "clocks": "true",
         "evals": "true",
         "opening": "true",
+        "lastFen": "true",
     }
     headers = mocked.headers(GAMES_URL)
     assert headers["Accept"] == "application/x-ndjson"
@@ -322,3 +324,129 @@ async def test_error_mid_stream_is_not_retried(api, mocked):
     assert seen == ["g1"]
     assert mocked.calls(GAMES_URL) == 1
     assert mocked.closed == 1
+
+
+# --- unified games -----------------------------------------------------------------
+
+
+def real_game(last_move_at, game_id, base=fx.LICHESS_BLITZ_MATE, **extra) -> dict:
+    return {**base, "id": game_id, "lastMoveAt": last_move_at, **extra}
+
+
+async def test_get_unified_games(api, mocked):
+    mocked.add(
+        GAMES_URL,
+        chunks=[
+            ndjson(
+                real_game(ms(2024, 6, 3), "g3"),
+                real_game(ms(2024, 6, 2), "g2", fx.LICHESS_DRAW),
+                real_game(ms(2024, 6, 1), "g1", fx.LICHESS_NO_PGN),
+            )
+        ],
+    )
+
+    out = await api.get_unified_games(USER)
+
+    assert isinstance(out, GameCollection)
+    assert (out.provider, out.username, out.errors) == ("lichess", USER, {})
+    assert [g.id for g in out.games] == ["g3", "g2", "g1"]
+    assert out.games[0].termination == "checkmate"
+    assert out.games[0].moves[0].eval_cp == 18
+    assert out.games[1].result == "1/2-1/2"
+    assert out.games[2].pgn is None and out.games[2].moves
+    assert out.games[0].raw is None
+
+
+async def test_get_unified_games_time_filter(api, mocked):
+    mocked.add(
+        GAMES_URL,
+        chunks=[
+            ndjson(
+                real_game(ms(2024, 6, 10, 0, 0, 1), "late"),
+                real_game(ms(2024, 6, 10), "edge"),
+                real_game(ms(2024, 5, 15), "start"),
+                real_game(ms(2024, 5, 14, 23, 59, 59), "early"),
+            )
+        ],
+    )
+
+    out = await api.get_unified_games(
+        USER,
+        from_ts=datetime(2024, 5, 15, tzinfo=timezone.utc),
+        to_ts=datetime(2024, 6, 10),
+    )
+
+    assert [g.id for g in out.games] == ["edge", "start"]
+    assert out.to_ts == datetime(2024, 6, 10, tzinfo=timezone.utc)
+    assert mocked.params(GAMES_URL)["until"] == str(ms(2024, 6, 10))
+
+
+async def test_get_unified_games_collects_conversion_errors(api, mocked):
+    broken = real_game(ms(2024, 6, 1), "bad", players={"white": "oops"})
+    mocked.add(GAMES_URL, chunks=[ndjson(real_game(ms(2024, 6, 2), "good"), broken)])
+
+    out = await api.get_unified_games(USER)
+
+    assert [g.id for g in out.games] == ["good"]
+    assert list(out.errors) == ["bad"]
+    assert "AttributeError" in out.errors["bad"]
+
+
+async def test_iter_unified_games_streams_and_skips_bad_games(api, mocked):
+    broken = real_game(ms(2024, 6, 1), "bad", players={"black": 1})
+    mocked.add(
+        GAMES_URL,
+        chunks=[ndjson(real_game(ms(2024, 6, 2), "good")), ndjson(broken)],
+    )
+
+    gen = api.iter_unified_games(USER)
+    first = await gen.__anext__()
+    assert first.id == "good"
+    assert [g async for g in gen] == []
+    assert mocked.closed == 1
+
+
+async def test_get_unified_games_include_raw(api, mocked):
+    raw = real_game(ms(2024, 6, 1), "g1")
+    mocked.add(GAMES_URL, chunks=[ndjson(raw)])
+
+    out = await api.get_unified_games(USER, include_raw=True)
+
+    assert out.games[0].raw == raw
+    assert "parsed_pgn" not in out.games[0].raw
+
+
+async def test_get_unified_games_passes_provider_kwargs(api, mocked):
+    mocked.add(GAMES_URL, chunks=[])
+
+    await api.get_unified_games(
+        USER,
+        from_ts=datetime(2024, 5, 15, tzinfo=timezone.utc),
+        max_games=10,
+        perf_type=["blitz", "rapid"],
+        rated=True,
+        color="white",
+        vs="bob",
+        created_lookback=timedelta(days=3),
+    )
+
+    params = mocked.params(GAMES_URL)
+    assert params["max"] == "10"
+    assert params["perfType"] == "blitz,rapid"
+    assert (params["rated"], params["color"], params["vs"]) == ("true", "white", "bob")
+    assert params["since"] == str(ms(2024, 5, 12))
+
+
+async def test_get_unified_games_rejects_unknown_kwargs(api, mocked):
+    with pytest.raises(TypeError):
+        await api.get_unified_games(USER, max_concurrency=4)
+
+
+async def test_get_unified_games_rejects_inverted_range(api, mocked):
+    with pytest.raises(ValueError, match="from_ts must be <= to_ts"):
+        await api.get_unified_games(
+            USER,
+            from_ts=datetime(2024, 2, 1, tzinfo=timezone.utc),
+            to_ts=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        )
+    assert not mocked.requests
