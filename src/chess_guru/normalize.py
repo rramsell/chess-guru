@@ -50,7 +50,7 @@ CHESSCOM_TERMINATIONS = {
     "threecheck": "variant_end",
 }
 
-_ECO_MOVES = re.compile(r"-?(?:\.\.\.|\d+\.)")
+_ECO_MOVES = re.compile(r"\.\.\.|-\d+\.")
 
 CHESSCOM_DRAW_CODES = {
     "agreed",
@@ -279,7 +279,9 @@ def _chesscom_opening(raw: dict, headers: dict) -> Optional[Opening]:
         # "Sicilian-Defense-2...e5-3.Nf3" -> "Sicilian Defense"
         slug = url.rstrip("/").rsplit("/", 1)[-1]
         slug = _ECO_MOVES.split(slug, maxsplit=1)[0]
-        name = slug.replace("-", " ").strip() or None
+        name = slug.replace("-", " ").strip()
+        if name in ("", "Undefined"):
+            name = None
     if eco is None and name is None:
         return None
     return Opening(eco=eco, name=name)
