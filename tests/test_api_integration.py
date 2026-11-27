@@ -7,7 +7,7 @@ import pytest
 from chess_guru import ChesscomAPI
 
 USERNAME = os.environ.get("CHESSCOM_TEST_USERNAME") or "JobandJethro"
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.chesscom]
 
 
 @pytest.fixture
