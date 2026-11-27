@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## [0.1.4] - 2026-11-26
+
+### Fixed
+- License metadata is now consistently MIT, matching the `LICENSE` file. Uses
+  the SPDX `license = "MIT"` field and `license-files` (PEP 639), and drops the
+  `Other/Proprietary License` classifier and the PolyForm text in the README.
+
 ## [0.1.3] - 2026-11-26
 
 ### Fixed

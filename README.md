@@ -131,5 +131,4 @@ Set `CHESSCOM_TEST_USERNAME` to run the integration tests against a different ac
 
 ## License
 
-PolyForm Noncommercial 1.0.0 — free for noncommercial use.  
-Commercial licensing: richramsell@proton.me
+MIT. See [LICENSE](LICENSE).
