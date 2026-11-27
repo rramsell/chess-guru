@@ -1,13 +1,14 @@
-"""Offline unit tests for ChesscomAPI, using an in-repo fake aiohttp session."""
+"""Offline unit tests for ChesscomAPI, using an in-repo fake aiohttp session.
+
+Retry, header and URL handling shared with LichessAPI is covered in test_http.py.
+"""
 
 import asyncio
 from datetime import datetime, timezone
 
-import aiohttp
 import pytest
 
 from chess_guru import ChesscomAPI
-from chess_guru.api import _terminal_error
 from fake_session import FakeSession
 from pgn_fixtures import NO_CLOCKS, WHITE_MATE_WITH_CLOCKS
 
@@ -56,43 +57,10 @@ async def test_request_requires_exactly_one_of_url_or_endpoint(api, mocked):
     assert not mocked.requests
 
 
-@pytest.mark.parametrize(
-    "bad_url",
-    [
-        "https://evil.example.com/pub/player/alice",
-        "https://api.chess.com/pubx/player/alice",
-        "http://api.chess.com/pub/player/alice",
-    ],
-)
-async def test_request_rejects_url_outside_base(api, mocked, bad_url):
-    with pytest.raises(ValueError, match="not a valid chess.com url"):
-        await api._request(url=bad_url)
-    assert not mocked.requests
-
-
 async def test_request_endpoint_joins_base_url(api, mocked):
     mocked.add(f"{BASE}/player/{USER}", payload={"username": USER})
     assert await api._request(endpoint=f"/player/{USER}") == {"username": USER}
     assert mocked.calls(f"{BASE}/player/{USER}") == 1
-
-
-async def test_custom_base_url_trailing_slash_is_normalised(mocked):
-    mocked.add("https://proxy.local/pub/player/alice", payload={"ok": True})
-    api = ChesscomAPI(mocked, base_url="https://proxy.local/pub/")
-    assert api.base_url == "https://proxy.local/pub/"
-    assert await api.get_player("alice") == {"ok": True}
-
-
-async def test_headers_are_sent_and_overridable(mocked):
-    mocked.add(f"{BASE}/player/{USER}", payload={})
-    api = ChesscomAPI(mocked, headers={"User-Agent": "my-app/1.0", "X-Extra": "1"})
-    await api.get_player(USER)
-    sent = mocked.requests[f"{BASE}/player/{USER}"][0]["headers"]
-    assert sent == {
-        "User-Agent": "my-app/1.0",
-        "Accept": "application/json",
-        "X-Extra": "1",
-    }
 
 
 @pytest.mark.parametrize(
@@ -108,64 +76,6 @@ async def test_headers_are_sent_and_overridable(mocked):
 async def test_simple_endpoints(api, mocked, method, path):
     mocked.add(f"{BASE}/{path}", payload={"path": path})
     assert await getattr(api, method)(USER) == {"path": path}
-
-
-# --- retry / giveup -----------------------------------------------------------
-
-
-@pytest.mark.parametrize("status", [429, 500, 502, 503])
-async def test_retries_on_429_and_5xx(api, mocked, status):
-    url = f"{BASE}/player/{USER}"
-    mocked.add(url, status=status)
-    mocked.add(url, status=status)
-    mocked.add(url, payload={"username": USER})
-
-    assert await api.get_player(USER) == {"username": USER}
-    assert mocked.calls(url) == 3
-
-
-async def test_gives_up_after_max_tries_on_5xx(api, mocked):
-    url = f"{BASE}/player/{USER}"
-    mocked.add(url, status=503, repeat=True)
-
-    with pytest.raises(aiohttp.ClientResponseError) as exc:
-        await api.get_player(USER)
-    assert exc.value.status == 503
-    assert mocked.calls(url) == 5
-
-
-@pytest.mark.parametrize("status", [400, 401, 403, 404, 410])
-async def test_gives_up_immediately_on_4xx(api, mocked, status):
-    url = f"{BASE}/player/{USER}"
-    mocked.add(url, status=status, repeat=True)
-
-    with pytest.raises(aiohttp.ClientResponseError) as exc:
-        await api.get_player(USER)
-    assert exc.value.status == status
-    assert mocked.calls(url) == 1
-
-
-async def test_retries_connection_errors(api, mocked):
-    url = f"{BASE}/player/{USER}"
-    mocked.add(url, exception=aiohttp.ClientConnectionError("boom"))
-    mocked.add(url, exception=asyncio.TimeoutError())
-    mocked.add(url, payload={"username": USER})
-
-    assert await api.get_player(USER) == {"username": USER}
-    assert mocked.calls(url) == 3
-
-
-def test_terminal_error_classification():
-    def err(status):
-        return aiohttp.ClientResponseError(None, (), status=status)
-
-    assert _terminal_error(err(404)) is True
-    assert _terminal_error(err(400)) is True
-    assert _terminal_error(err(429)) is False
-    assert _terminal_error(err(500)) is False
-    assert _terminal_error(aiohttp.ClientConnectionError()) is False
-    # Backwards-compatible alias still works.
-    assert ChesscomAPI._terminal_error(err(404)) is True
 
 
 # --- get_games ----------------------------------------------------------------
@@ -332,14 +242,3 @@ async def test_get_games_respects_max_concurrency(api, mocked):
 
     assert len(out["months"]) == 8
     assert peak == 3
-
-
-def test_default_user_agent_matches_package_version():
-    from importlib.metadata import version
-
-    import chess_guru
-    from chess_guru.api import DEFAULT_USER_AGENT
-
-    assert chess_guru.__version__ == version("chess-guru")
-    assert DEFAULT_USER_AGENT == f"chess-guru/{chess_guru.__version__}"
-    assert ChesscomAPI(session=None).headers["User-Agent"] == DEFAULT_USER_AGENT

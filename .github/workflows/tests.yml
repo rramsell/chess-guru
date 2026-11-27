@@ -3,10 +3,21 @@ name: tests
 on:
   push:
   pull_request:
+  schedule:
+    - cron: "0 6 * * 1"  # weekly live API check
   workflow_dispatch:
     inputs:
-      username:
+      provider:
+        description: "Which live API to test"
+        type: choice
+        options: [all, chesscom, lichess]
+        default: all
+      chesscom_username:
         description: "Chess.com username for integration tests (blank = test default)"
+        required: false
+        default: ""
+      lichess_username:
+        description: "Lichess username for integration tests (blank = test default)"
         required: false
         default: ""
 
@@ -43,9 +54,14 @@ jobs:
         run: uv run pytest tests
 
   integration:
-    # Hits the live chess.com API, so only run when triggered by hand.
-    if: github.event_name == 'workflow_dispatch'
+    # Hits live APIs, so only run by hand or on the weekly schedule.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # inputs are empty on scheduled runs, so fall back to every provider
+        provider: ${{ fromJSON((inputs.provider == 'chesscom' || inputs.provider == 'lichess') && format('["{0}"]', inputs.provider) || '["chesscom", "lichess"]') }}
     steps:
       - uses: actions/checkout@v7
 
@@ -58,5 +74,7 @@ jobs:
 
       - name: Run integration tests
         env:
-          CHESSCOM_TEST_USERNAME: ${{ inputs.username }}
-        run: uv run pytest tests -m integration --reruns 2 --reruns-delay 5
+          CHESSCOM_TEST_USERNAME: ${{ inputs.chesscom_username }}
+          LICHESS_TEST_USERNAME: ${{ inputs.lichess_username }}
+          LICHESS_TOKEN: ${{ secrets.LICHESS_TOKEN }}
+        run: uv run pytest tests -m "integration and ${{ matrix.provider }}" --reruns 2 --reruns-delay 5
