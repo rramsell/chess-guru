@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented here.
 
+## [0.3.0] - 2026-11-27
+
+### Added
+- Unified game models built on pydantic v2: `Game`, `GameCollection`,
+  `Player`, `TimeControl`, `Opening` and `Move`. Same fields for both
+  providers, UTC-aware datetimes, and values that don't map fall back to
+  `"other"` with the original kept in a `*_raw` field.
+- `game_from_chesscom()` / `game_from_lichess()` to convert raw game dicts.
+- `get_unified_games()` and `iter_unified_games()` on both clients, returning
+  games newest first. Games that fail to convert and Chess.com months that
+  fail to fetch are listed in `GameCollection.errors`. `include_raw=True`
+  keeps the provider's game dict on `Game.raw`.
+- `fetch_all_games()` to query Chess.com and Lichess concurrently.
+
+### Changed
+- `pydantic>=2,<3` is now a dependency. `get_games()` and `iter_games()`
+  return exactly what they did before.
+
+### Internal
+- Raw game fixtures from real Chess.com and Lichess responses, unit tests for
+  the models, converters and new methods, and live tests for both providers.
+- New CI job running the unit tests on Python 3.9 with the lowest allowed
+  dependency versions.
+
 ## [0.2.0] - 2026-11-27
 
 ### Added
