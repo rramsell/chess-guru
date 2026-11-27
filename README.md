@@ -1,8 +1,15 @@
 # chess-guru
 
-Async Python client for the Chess.com Public API.
+[![tests](https://github.com/rramsell/chess-guru/actions/workflows/tests.yml/badge.svg)](https://github.com/rramsell/chess-guru/actions/workflows/tests.yml)
+[![PyPI version](https://img.shields.io/pypi/v/chess-guru.svg)](https://pypi.org/project/chess-guru/)
+
+Async Python client for the [Chess.com Public API](https://www.chess.com/news/view/published-data-api).
 
 Built on `aiohttp` with automatic retries for rate limits and server errors. Doesn't mess with your logging config. Supports time-based filtering and concurrent month fetching.
+
+- PyPI: [chess-guru](https://pypi.org/project/chess-guru/)
+- Source: [github.com/rramsell/chess-guru](https://github.com/rramsell/chess-guru)
+- Changelog: [CHANGELOG.md](https://github.com/rramsell/chess-guru/blob/main/CHANGELOG.md)
 
 ## Install
 ```bash
@@ -101,14 +108,26 @@ ChesscomAPI(
     session,
     base_url="https://api.chess.com/pub",
     timeout_sec=20,
-    user_agent="chess-guru/0.1.0",
+    user_agent="chess-guru/<installed version>",
     headers=None
 )
 
 api.get_player(username)
+api.get_player_stats(username)
+api.get_games_to_move(username)
+api.get_tournaments(username)
 api.get_archives(username)
 api.get_games(username, max_concurrency=10, from_ts=None, to_ts=None)
 ```
+
+## Development
+```bash
+uv sync --group dev
+uv run pytest                    # offline unit tests (default)
+uv run pytest -m integration     # live tests against api.chess.com
+```
+
+Set `CHESSCOM_TEST_USERNAME` to run the integration tests against a different account.
 
 ## License
 
