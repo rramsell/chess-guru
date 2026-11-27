@@ -150,7 +150,7 @@ Values that don't map to the lists above come through as `"other"` (or unchanged
 - **Chess.com opening names** come from the ECO URL with the move list dropped, e.g. `"Sicilian Defense Alapin Variation"`.
 - **Lichess draws** don't say why the game was drawn: agreement, repetition and the 50-move rule are all `"draw"`, and the PGN `Termination` header just says `"Normal"`. They come through as `termination="other"`, `termination_raw="draw"`. Stalemate and running out of time against insufficient material are reported separately.
 - **Lichess `timeout`** means a player left the game and the opponent claimed the win, so it maps to `"abandoned"`. Running out of clock is `outoftime`, which maps to `"timeout"`.
-- **Lichess `fromPosition`** games have `variant="standard"`, `variant_raw="fromPosition"` and `initial_fen` set. `final_fen` is `None` for Lichess, since the export doesn't include it by default.
+- **Lichess `fromPosition`** games have `variant="standard"`, `variant_raw="fromPosition"` and `initial_fen` set.
 - **Lichess correspondence** time controls use the same `raw` format as Chess.com daily, e.g. `"1/259200"` for three days a move.
 - Games without a usable PGN still convert: Lichess moves fall back to the plain `moves` string (no clocks or evals), Chess.com games get an empty `moves` list.
 

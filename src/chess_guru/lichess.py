@@ -116,6 +116,7 @@ class LichessAPI(BaseAPIClient):
             "clocks": "true",
             "evals": "true",
             "opening": "true",
+            "lastFen": "true",
         }
         # since/until filter on creation time; games are matched on end time
         # afterwards, so reach back far enough to catch games that started early.

@@ -211,6 +211,7 @@ def test_chesscom_variant(rules, variant):
         ("resigned", "win", "resignation", "resigned"),
         ("timeout", "win", "timeout", "timeout"),
         ("win", "abandoned", "abandoned", "abandoned"),
+        ("aborted", "aborted", "aborted", "aborted"),
         ("kingofthehill", "win", "variant_end", "kingofthehill"),
         ("win", "threecheck", "variant_end", "threecheck"),
         ("agreed", "agreed", "draw_agreement", "agreed"),
@@ -474,6 +475,13 @@ def test_lichess_resign():
     g = game_from_lichess(fx.LICHESS_RESIGN)
     assert (g.termination, g.result) == ("resignation", "0-1")
     assert g.time_control.raw == "360+0"
+    assert g.final_fen is None
+
+
+def test_lichess_final_fen_from_last_fen():
+    fen = "1K6/1qr5/8/8/8/4k3/8/8 w - - 8 1"
+    g = game_from_lichess({**fx.LICHESS_RESIGN, "lastFen": fen})
+    assert g.final_fen == fen
 
 
 def test_lichess_outoftime():

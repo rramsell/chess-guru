@@ -104,6 +104,7 @@ async def test_default_games_params_and_headers(api, mocked):
         "clocks": "true",
         "evals": "true",
         "opening": "true",
+        "lastFen": "true",
     }
     headers = mocked.headers(GAMES_URL)
     assert headers["Accept"] == "application/x-ndjson"

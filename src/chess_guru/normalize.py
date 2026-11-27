@@ -46,6 +46,7 @@ CHESSCOM_TERMINATIONS = {
     "insufficient": "insufficient_material",
     "50move": "fifty_move",
     "abandoned": "abandoned",
+    "aborted": "aborted",
     "kingofthehill": "variant_end",
     "threecheck": "variant_end",
 }
