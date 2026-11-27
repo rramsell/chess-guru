@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import aiohttp
 import backoff
@@ -41,6 +43,14 @@ def _log_giveup(details: dict[str, Any]) -> None:
         tries,
         exc,
     )
+
+
+def _terminal_error(e: Exception) -> bool:
+    """Return True for errors that should not be retried (4xx other than 429)."""
+    if isinstance(e, aiohttp.ClientResponseError):
+        return e.status is not None and e.status < 500 and e.status != 429
+    return False
+
 
 class ChesscomAPI:
     def __init__(
@@ -87,12 +97,6 @@ class ChesscomAPI:
             base_headers.update(headers)
         
         self.headers = base_headers
-
-    @staticmethod
-    def _terminal_error(e: Exception) -> bool:
-        if isinstance(e, aiohttp.ClientResponseError):
-            return e.status is not None and e.status < 500 and e.status != 429
-        return False
 
     @backoff.on_exception(
         backoff.expo,
@@ -302,4 +306,8 @@ class ChesscomAPI:
             "from_ts": from_dt.isoformat() if from_dt else None,
             "to_ts": to_dt.isoformat() if to_dt else None,
         }
-    
+
+    # Backwards-compatible alias. Defined at the end of the class body so the
+    # backoff decorator above resolves the module-level function, not a
+    # staticmethod object (which is not callable on Python 3.9).
+    _terminal_error = staticmethod(_terminal_error)
