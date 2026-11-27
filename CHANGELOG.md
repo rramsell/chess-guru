@@ -20,8 +20,8 @@ All notable changes to this project are documented here.
   installed version.
 
 ### Internal
-- Offline unit tests for the parser and client (HTTP mocked with
-  `aioresponses`). Live chess.com tests are marked `integration`, skipped by
+- Offline unit tests for the parser and client (HTTP mocked with an
+  in-repo fake session). Live chess.com tests are marked `integration`, skipped by
   default, and run in CI only on manual dispatch.
 - CI runs on Python 3.9–3.13 and lints with ruff.
 

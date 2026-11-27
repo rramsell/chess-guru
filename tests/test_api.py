@@ -1,15 +1,14 @@
-"""Offline unit tests for ChesscomAPI. HTTP is mocked with aioresponses."""
+"""Offline unit tests for ChesscomAPI, using an in-repo fake aiohttp session."""
 
 import asyncio
 from datetime import datetime, timezone
 
 import aiohttp
 import pytest
-from aioresponses import aioresponses
-from yarl import URL
 
 from chess_guru import ChesscomAPI
 from chess_guru.api import _terminal_error
+from fake_session import FakeSession
 from pgn_fixtures import NO_CLOCKS, WHITE_MATE_WITH_CLOCKS
 
 BASE = "https://api.chess.com/pub"
@@ -25,20 +24,14 @@ def ts(*args) -> int:
     return int(datetime(*args, tzinfo=timezone.utc).timestamp())
 
 
-def calls(m: aioresponses, url: str) -> int:
-    return len(m.requests.get(("GET", URL(url)), []))
-
-
 @pytest.fixture
 def mocked():
-    with aioresponses() as m:
-        yield m
+    return FakeSession()
 
 
 @pytest.fixture
-async def api():
-    async with aiohttp.ClientSession() as session:
-        yield ChesscomAPI(session)
+def api(mocked):
+    return ChesscomAPI(mocked)
 
 
 @pytest.fixture(autouse=True)
@@ -78,25 +71,23 @@ async def test_request_rejects_url_outside_base(api, mocked, bad_url):
 
 
 async def test_request_endpoint_joins_base_url(api, mocked):
-    mocked.get(f"{BASE}/player/{USER}", payload={"username": USER})
+    mocked.add(f"{BASE}/player/{USER}", payload={"username": USER})
     assert await api._request(endpoint=f"/player/{USER}") == {"username": USER}
-    assert calls(mocked, f"{BASE}/player/{USER}") == 1
+    assert mocked.calls(f"{BASE}/player/{USER}") == 1
 
 
 async def test_custom_base_url_trailing_slash_is_normalised(mocked):
-    mocked.get("https://proxy.local/pub/player/alice", payload={"ok": True})
-    async with aiohttp.ClientSession() as session:
-        api = ChesscomAPI(session, base_url="https://proxy.local/pub/")
-        assert api.base_url == "https://proxy.local/pub/"
-        assert await api.get_player("alice") == {"ok": True}
+    mocked.add("https://proxy.local/pub/player/alice", payload={"ok": True})
+    api = ChesscomAPI(mocked, base_url="https://proxy.local/pub/")
+    assert api.base_url == "https://proxy.local/pub/"
+    assert await api.get_player("alice") == {"ok": True}
 
 
 async def test_headers_are_sent_and_overridable(mocked):
-    mocked.get(f"{BASE}/player/{USER}", payload={})
-    async with aiohttp.ClientSession() as session:
-        api = ChesscomAPI(session, headers={"User-Agent": "my-app/1.0", "X-Extra": "1"})
-        await api.get_player(USER)
-    sent = mocked.requests[("GET", URL(f"{BASE}/player/{USER}"))][0].kwargs["headers"]
+    mocked.add(f"{BASE}/player/{USER}", payload={})
+    api = ChesscomAPI(mocked, headers={"User-Agent": "my-app/1.0", "X-Extra": "1"})
+    await api.get_player(USER)
+    sent = mocked.requests[f"{BASE}/player/{USER}"][0]["headers"]
     assert sent == {
         "User-Agent": "my-app/1.0",
         "Accept": "application/json",
@@ -115,7 +106,7 @@ async def test_headers_are_sent_and_overridable(mocked):
     ],
 )
 async def test_simple_endpoints(api, mocked, method, path):
-    mocked.get(f"{BASE}/{path}", payload={"path": path})
+    mocked.add(f"{BASE}/{path}", payload={"path": path})
     assert await getattr(api, method)(USER) == {"path": path}
 
 
@@ -125,43 +116,43 @@ async def test_simple_endpoints(api, mocked, method, path):
 @pytest.mark.parametrize("status", [429, 500, 502, 503])
 async def test_retries_on_429_and_5xx(api, mocked, status):
     url = f"{BASE}/player/{USER}"
-    mocked.get(url, status=status)
-    mocked.get(url, status=status)
-    mocked.get(url, payload={"username": USER})
+    mocked.add(url, status=status)
+    mocked.add(url, status=status)
+    mocked.add(url, payload={"username": USER})
 
     assert await api.get_player(USER) == {"username": USER}
-    assert calls(mocked, url) == 3
+    assert mocked.calls(url) == 3
 
 
 async def test_gives_up_after_max_tries_on_5xx(api, mocked):
     url = f"{BASE}/player/{USER}"
-    mocked.get(url, status=503, repeat=True)
+    mocked.add(url, status=503, repeat=True)
 
     with pytest.raises(aiohttp.ClientResponseError) as exc:
         await api.get_player(USER)
     assert exc.value.status == 503
-    assert calls(mocked, url) == 5
+    assert mocked.calls(url) == 5
 
 
 @pytest.mark.parametrize("status", [400, 401, 403, 404, 410])
 async def test_gives_up_immediately_on_4xx(api, mocked, status):
     url = f"{BASE}/player/{USER}"
-    mocked.get(url, status=status, repeat=True)
+    mocked.add(url, status=status, repeat=True)
 
     with pytest.raises(aiohttp.ClientResponseError) as exc:
         await api.get_player(USER)
     assert exc.value.status == status
-    assert calls(mocked, url) == 1
+    assert mocked.calls(url) == 1
 
 
 async def test_retries_connection_errors(api, mocked):
     url = f"{BASE}/player/{USER}"
-    mocked.get(url, exception=aiohttp.ClientConnectionError("boom"))
-    mocked.get(url, exception=asyncio.TimeoutError())
-    mocked.get(url, payload={"username": USER})
+    mocked.add(url, exception=aiohttp.ClientConnectionError("boom"))
+    mocked.add(url, exception=asyncio.TimeoutError())
+    mocked.add(url, payload={"username": USER})
 
     assert await api.get_player(USER) == {"username": USER}
-    assert calls(mocked, url) == 3
+    assert mocked.calls(url) == 3
 
 
 def test_terminal_error_classification():
@@ -188,17 +179,17 @@ def game(end_time, pgn=WHITE_MATE_WITH_CLOCKS, **extra):
 
 
 def mock_archives(m, *year_months):
-    m.get(
+    m.add(
         ARCHIVES_URL, payload={"archives": [month_url(y, mo) for y, mo in year_months]}
     )
 
 
 async def test_get_games_no_filter_returns_everything(api, mocked):
     mock_archives(mocked, (2024, 5), (2024, 6))
-    mocked.get(
+    mocked.add(
         month_url(2024, 5), payload={"games": [game(ts(2024, 5, 1)), game(None)]}
     )
-    mocked.get(
+    mocked.add(
         month_url(2024, 6), payload={"games": [game(ts(2024, 6, 1), pgn=NO_CLOCKS)]}
     )
 
@@ -217,7 +208,7 @@ async def test_get_games_no_filter_returns_everything(api, mocked):
 
 async def test_get_games_time_filter_across_months(api, mocked):
     mock_archives(mocked, (2024, 4), (2024, 5), (2024, 6), (2024, 7))
-    mocked.get(
+    mocked.add(
         month_url(2024, 5),
         payload={
             "games": [
@@ -228,7 +219,7 @@ async def test_get_games_time_filter_across_months(api, mocked):
             ]
         },
     )
-    mocked.get(
+    mocked.add(
         month_url(2024, 6),
         payload={
             "games": [
@@ -246,8 +237,8 @@ async def test_get_games_time_filter_across_months(api, mocked):
     )
 
     assert out["archives"] == [month_url(2024, 5), month_url(2024, 6)]
-    assert calls(mocked, month_url(2024, 4)) == 0
-    assert calls(mocked, month_url(2024, 7)) == 0
+    assert mocked.calls(month_url(2024, 4)) == 0
+    assert mocked.calls(month_url(2024, 7)) == 0
     assert out["errors"] == {}
     may = [g["end_time"] for g in out["months"][month_url(2024, 5)]["games"]]
     june = [g["end_time"] for g in out["months"][month_url(2024, 6)]["games"]]
@@ -259,20 +250,20 @@ async def test_get_games_time_filter_across_months(api, mocked):
 
 async def test_get_games_only_from_ts(api, mocked):
     mock_archives(mocked, (2023, 12), (2024, 1))
-    mocked.get(month_url(2024, 1), payload={"games": [game(ts(2024, 1, 2))]})
+    mocked.add(month_url(2024, 1), payload={"games": [game(ts(2024, 1, 2))]})
 
     out = await api.get_games(USER, from_ts=datetime(2024, 1, 1, tzinfo=timezone.utc))
 
     assert out["archives"] == [month_url(2024, 1)]
     assert out["to_ts"] is None
-    assert calls(mocked, month_url(2023, 12)) == 0
+    assert mocked.calls(month_url(2023, 12)) == 0
 
 
 async def test_get_games_records_failed_month_in_errors(api, mocked):
     mock_archives(mocked, (2024, 5), (2024, 6), (2024, 7))
-    mocked.get(month_url(2024, 5), payload={"games": [game(ts(2024, 5, 1))]})
-    mocked.get(month_url(2024, 6), status=404)
-    mocked.get(month_url(2024, 7), status=500, repeat=True)
+    mocked.add(month_url(2024, 5), payload={"games": [game(ts(2024, 5, 1))]})
+    mocked.add(month_url(2024, 6), status=404)
+    mocked.add(month_url(2024, 7), status=500, repeat=True)
 
     out = await api.get_games(USER)
 
@@ -280,15 +271,15 @@ async def test_get_games_records_failed_month_in_errors(api, mocked):
     assert set(out["errors"]) == {month_url(2024, 6), month_url(2024, 7)}
     assert "404" in out["errors"][month_url(2024, 6)]
     assert "500" in out["errors"][month_url(2024, 7)]
-    assert calls(mocked, month_url(2024, 6)) == 1
-    assert calls(mocked, month_url(2024, 7)) == 5
+    assert mocked.calls(month_url(2024, 6)) == 1
+    assert mocked.calls(month_url(2024, 7)) == 5
     # the archive list still reports every month that was attempted
     assert len(out["archives"]) == 3
 
 
 async def test_get_games_keeps_game_when_pgn_unparseable(api, mocked):
     mock_archives(mocked, (2024, 5))
-    mocked.get(
+    mocked.add(
         month_url(2024, 5), payload={"games": [game(ts(2024, 5, 1), pgn="garbage")]}
     )
 
@@ -301,7 +292,7 @@ async def test_get_games_keeps_game_when_pgn_unparseable(api, mocked):
 
 async def test_get_games_does_not_mutate_payload_extras(api, mocked):
     mock_archives(mocked, (2024, 5))
-    mocked.get(
+    mocked.add(
         month_url(2024, 5), payload={"games": [game(ts(2024, 5, 1))], "extra": 1}
     )
 
@@ -335,7 +326,7 @@ async def test_get_games_respects_max_concurrency(api, mocked):
         in_flight -= 1
 
     for y, mo in months:
-        mocked.get(month_url(y, mo), payload={"games": []}, callback=slow)
+        mocked.add(month_url(y, mo), payload={"games": []}, callback=slow)
 
     out = await api.get_games(USER, max_concurrency=3)
 
