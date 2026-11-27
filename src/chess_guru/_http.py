@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Callable, Generator, Optional
+from datetime import datetime
+from typing import Any, AsyncIterator, Callable, Generator, Optional
 
 import aiohttp
 import backoff
 
 from ._version import __version__
+from .models import Game, GameCollection
+from .utils import to_utc_dt
 
 DEFAULT_USER_AGENT = f"chess-guru/{__version__}"
 
@@ -137,6 +140,103 @@ class BaseAPIClient:
     ) -> Any:
         resolved = self._resolve_url(url=url, endpoint=endpoint)
         return await self._with_retry(self._get_json)(resolved, **kwargs)
+
+    # --- unified games ---------------------------------------------------------
+
+    provider_key = ""
+
+    def _raw_unified_games(
+        self,
+        username: str,
+        from_dt: Optional[datetime],
+        to_dt: Optional[datetime],
+        errors: dict[str, str],
+        **provider_kwargs: Any,
+    ) -> AsyncIterator[dict]:
+        """Raw game dicts for the unified methods. Fetch problems that don't
+        stop the whole request go into ``errors``."""
+        raise NotImplementedError
+
+    @staticmethod
+    def _to_game(raw: dict, include_raw: bool) -> Game:
+        raise NotImplementedError
+
+    @staticmethod
+    def _game_key(raw: dict) -> str:
+        raise NotImplementedError
+
+    async def _unified_games(
+        self,
+        username: str,
+        from_ts: Optional[datetime],
+        to_ts: Optional[datetime],
+        include_raw: bool,
+        errors: dict[str, str],
+        provider_kwargs: dict[str, Any],
+    ) -> AsyncIterator[Game]:
+        from_dt = to_utc_dt(from_ts)
+        to_dt = to_utc_dt(to_ts)
+        if from_dt and to_dt and from_dt > to_dt:
+            raise ValueError("from_ts must be <= to_ts")
+
+        async for raw in self._raw_unified_games(
+            username, from_dt, to_dt, errors, **provider_kwargs
+        ):
+            try:
+                yield self._to_game(raw, include_raw)
+            except Exception as e:
+                key = self._game_key(raw)
+                logger.debug("Skipping %s game %s: %r", self.provider_name, key, e)
+                errors[key] = repr(e)
+
+    async def iter_unified_games(
+        self,
+        username: str,
+        *,
+        from_ts: Optional[datetime] = None,
+        to_ts: Optional[datetime] = None,
+        include_raw: bool = False,
+        **provider_kwargs: Any,
+    ) -> AsyncIterator[Game]:
+        """
+        Yields the user's games as :class:`Game` models, newest first.
+
+        ``from_ts`` / ``to_ts`` work as in ``get_games``. ``include_raw`` keeps
+        the provider's game dict on ``Game.raw``. Other keyword arguments go to
+        the provider's ``get_games``. Games that fail to fetch or convert are
+        logged and skipped; use ``get_unified_games`` to see which.
+        """
+        async for game in self._unified_games(
+            username, from_ts, to_ts, include_raw, {}, provider_kwargs
+        ):
+            yield game
+
+    async def get_unified_games(
+        self,
+        username: str,
+        *,
+        from_ts: Optional[datetime] = None,
+        to_ts: Optional[datetime] = None,
+        include_raw: bool = False,
+        **provider_kwargs: Any,
+    ) -> GameCollection:
+        """Same as ``iter_unified_games`` but returns a :class:`GameCollection`
+        that also lists what failed in ``errors``."""
+        errors: dict[str, str] = {}
+        games = [
+            g
+            async for g in self._unified_games(
+                username, from_ts, to_ts, include_raw, errors, provider_kwargs
+            )
+        ]
+        return GameCollection(
+            provider=self.provider_key,
+            username=username,
+            games=games,
+            errors=errors,
+            from_ts=to_utc_dt(from_ts),
+            to_ts=to_utc_dt(to_ts),
+        )
 
     # Defined last so nothing above picks up the staticmethod object, which
     # isn't callable on Python 3.9.

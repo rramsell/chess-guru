@@ -8,6 +8,8 @@ from typing import Any, AsyncIterator, Generator, Optional, Sequence, Union
 import aiohttp
 
 from ._http import DEFAULT_USER_AGENT, BaseAPIClient, logger
+from .models import Game
+from .normalize import game_from_lichess
 from .utils import attach_parsed_pgn, game_in_range, to_utc_dt
 
 # Lichess asks clients to wait a full minute after a 429.
@@ -39,6 +41,7 @@ def _bool_param(value: bool) -> str:
 
 class LichessAPI(BaseAPIClient):
     provider_name = "lichess"
+    provider_key = "lichess"
     retry_jitter = None
     _retry_wait_gen = staticmethod(_lichess_wait_gen)
 
@@ -272,3 +275,24 @@ class LichessAPI(BaseAPIClient):
             "from_ts": from_dt.isoformat() if from_dt else None,
             "to_ts": to_dt.isoformat() if to_dt else None,
         }
+
+    async def _raw_unified_games(
+        self,
+        username: str,
+        from_dt: Optional[datetime],
+        to_dt: Optional[datetime],
+        errors: dict[str, str],
+        **provider_kwargs: Any,
+    ) -> AsyncIterator[dict]:
+        async for g in self.iter_games(
+            username, from_ts=from_dt, to_ts=to_dt, **provider_kwargs
+        ):
+            yield g
+
+    @staticmethod
+    def _to_game(raw: dict, include_raw: bool) -> Game:
+        return game_from_lichess(raw, include_raw=include_raw)
+
+    @staticmethod
+    def _game_key(raw: dict) -> str:
+        return str(raw.get("id") or "<unknown game>")
